@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вращение фигуры</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+
+        canvas {
+            border: 1px solid #000;
+            background-color: #fff;
+        }
+
+        .controls {
+            margin-left: 20px;
+        }
+
+        .controls input,
+        .controls button,
+        .controls select {
+            margin-bottom: 10px;
+        }
+
+        .center-point {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: red;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .column {
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="column">
+        <div style="position: relative;">
+            <canvas id="canvas" width="800" height="800"></canvas>
+            <div class="center-point" style="top: 400px; left: 400px;"></div>
+        </div>
+        <div class="controls">
+            <label for="angle">Угол поворота (градусы):</label>
+            <input type="number" id="angle" value="45">
+            <label for="fps">Скорость вращения (кадры/сек):</label>
+            <select id="fps">
+                <option value="12">12</option>
+                <option value="24">24</option>
+                <option value="30">30</option>
+                <option value="48">48</option>
+                <option value="60">60</option>
+            </select>
+
+        </div>
+        <button id="startRotation" class="btn btn-success">Начать вращение</button>
+        <button onclick="clearCanvas()" class="btn btn-danger">Сотри ее в порошок</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const angleInput = document.getElementById('angle');
+        const fpsSelect = document.getElementById('fps');
+        const startRotationButton = document.getElementById('startRotation');
+
+        let isRotating = false;
+        let rotationAngle = 0;
+        let userShape = [];
+        let animationFrameId = null;
+
+        // Работа с действиями мыши над территорией canvas
+        canvas.addEventListener('mousedown', (e) => {
+            if (!isRotating) {
+                userShape = [];
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const startX = e.offsetX;
+                const startY = e.offsetY;
+                userShape.push({ x: startX, y: startY });
+
+                canvas.addEventListener('mousemove', onMouseMove);
+                canvas.addEventListener('mouseup', onMouseUp);
+            } else {
+                const startX = e.offsetX;
+                const startY = e.offsetY;
+                userShape.push({ x: startX, y: startY });
+
+                canvas.addEventListener('mousemove', onMouseMove);
+                canvas.addEventListener('mouseup', onMouseUp);
+            }
+        });
+
+        // Очистка холста
+        function clearCanvas() {
+            userShape = [];
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Записываем где движется мышь в массив фигуры
+        function onMouseMove(e) {
+            const x = e.offsetX;
+            const y = e.offsetY;
+            userShape.push({ x, y });
+            drawShape();
+        }
+
+        // Убираем обработчики событий, чтобы рисование не происходило за територией Canvas
+        function onMouseUp() {
+            canvas.removeEventListener('mousemove', onMouseMove);
+            canvas.removeEventListener('mouseup', onMouseUp);
+        }
+
+        // Рисуем форму
+        function drawShape() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.moveTo(userShape[0].x, userShape[0].y);
+            for (let i = 1; i < userShape.length; i++) {
+                ctx.lineTo(userShape[i].x, userShape[i].y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+
+        // Вращаем точку Афинными преобразованиями
+        function rotatePoint(x, y, cx, cy, angle) {
+            const radians = angle * Math.PI / 180;
+            const cos = Math.cos(radians);
+            const sin = Math.sin(radians);
+
+            // Применяем формулы Афинны
+            // x,y - исходные коорды | cx, cy - центр | xNew, yNew - новые | angle - угол поворота
+            const xNew = cx + (x - cx) * cos - (y - cy) * sin;
+            const yNew = cy + (x - cx) * sin + (y - cy) * cos;
+
+            return { x: xNew, y: yNew };
+        }
+
+        // Врщаем всю фигуру
+        function rotateShape(angle) {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            // Создаем новый массив с повернутыми точками
+            const rotatedShape = userShape.map(point => {
+                return rotatePoint(point.x, point.y, centerX, centerY, angle);
+            });
+
+            // Очищаем холст и рисуем повернутую фигуру
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            ctx.moveTo(rotatedShape[0].x, rotatedShape[0].y);
+            for (let i = 1; i < rotatedShape.length; i++) {
+                ctx.lineTo(rotatedShape[i].x, rotatedShape[i].y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+
+
+        // Добавляем обработчики кнопке
+        startRotationButton.addEventListener('click', () => {
+            const angle = parseFloat(angleInput.value);
+            const fps = parseFloat(fpsSelect.value);
+            if (!isRotating) {
+                isRotating = true;
+                startRotationButton.textContent = 'Остановить вращение';
+                rotateContinuous(angle, fps);
+            } else {
+                isRotating = false;
+                startRotationButton.textContent = 'Начать вращение';
+                cancelAnimationFrame(animationFrameId);
+            }
+        });
+
+        function rotateContinuous(angle, fps) {
+            if (!isRotating) return;
+
+            rotationAngle += angle;
+            rotateShape(rotationAngle);
+
+            const delay = 1000 / fps; // ЗАДЕРЖКА МЕЖДУ КАДРАМИИ ВОТ ОНА ГДЕ
+            setTimeout(() => {
+                animationFrameId = requestAnimationFrame(() => rotateContinuous(angle, fps));
+            }, delay);
+        }
+    </script>
+</body>
+
+</html>

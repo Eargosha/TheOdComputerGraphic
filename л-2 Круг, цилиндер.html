@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <title>Рисование эллипса и окружности алгоритмом Брезенхема</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+
+        canvas {
+            border: 1px solid #000;
+            background-color: #fff;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        .controls label {
+            margin-right: 10px;
+        }
+
+        .controls input {
+            margin-right: 20px;
+        }
+
+        .myRow {
+            width: 1200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas" width="800" height="700"></canvas>
+    <div class="controls">
+        <div class="myRow">
+            <label for="circleX">Центр окружности (X):</label>
+            <input onchange="drawShapes()" type="number" id="circleX" value="200" min="0" max="800">
+            <label for="circleY">Центр окружности (Y):</label>
+            <input onchange="drawShapes()" type="number" id="circleY" value="200" min="0" max="700">
+            <label for="circleRadius">Радиус окружности:</label>
+            <input onchange="drawShapes()" type="number" id="circleRadius" value="100" min="1" max="400">
+        </div>
+        <div class="myRow">
+            <label for="ellipseX">Центр эллипса (X):</label>
+            <input onchange="drawShapes()" type="number" id="ellipseX" value="200" min="0" max="800">
+            <label for="ellipseY">Центр эллипса (Y):</label>
+            <input onchange="drawShapes()" type="number" id="ellipseY" value="200" min="0" max="700">
+            <label for="ellipseA">Полуось эллипса (a):</label>
+            <input onchange="drawShapes()" type="number" id="ellipseA" value="150" min="1" max="400">
+            <label for="ellipseB">Полуось эллипса (b):</label>
+            <input onchange="drawShapes()" type="number" id="ellipseB" value="80" min="1" max="400">
+        </div>
+        <div class="myRow">
+            <label for="scaleFactor">Масштаб:</label>
+            <input onchange="drawShapes()" type="number" id="scaleFactor" value="1" min="0.1" step="0.1" max="10">
+            <button onclick="drawShapes()">Нарисовать</button>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let scaleFactor = 2;
+        ctx.scale(scaleFactor, scaleFactor);
+
+        // Отрисовка 1 пикселя
+        function drawPixel(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, 1, 1);
+        }
+
+        // Отрисовка окружности (8 блоков)
+        function drawCircle(xc, yc, x, y, color) {
+            drawPixel(xc + x, yc + y, color);
+            drawPixel(xc - x, yc + y, color);
+            drawPixel(xc + x, yc - y, color);
+            drawPixel(xc - x, yc - y, color);
+            drawPixel(xc + y, yc + x, color);
+            drawPixel(xc - y, yc + x, color);
+            drawPixel(xc + y, yc - x, color);
+            drawPixel(xc - y, yc - x, color);
+        }
+
+        // Отрисовка окружности по Брезенхаму
+        // + Б: все вычисления целочисленные и просты в реализации
+        // - Б: знать радиус и центр окружности
+        function bresenhamCircle(xc, yc, r, color) {
+            let x = 0, y = r;
+            // Инициализация переменных
+            let d = 3 - 2 * r;
+            let u = 6;
+            let v = 10 - 4 * r;
+
+            // Отрисовка начальных точек
+            drawCircle(xc, yc, x, y, color);
+
+            // Основной цикл
+            while (y >= x) {
+                x++;
+                if (d > 0) {
+                    y--;
+                    d = d + v;
+                    u = u + 4;
+                    v = v + 8;
+                } else {
+                    d = d + u;
+                    u = u + 4;
+                    v = v + 4;
+                }
+                // Отрисовка 8 частей окружности
+                drawCircle(xc, yc, x, y, color);
+            }
+        }
+
+        function drawEllipse(xc, yc, a, b, color) {
+            let x = 0, y = b;
+            let a2 = a * a, b2 = b * b;
+
+            // Начальное значение дискриминанта
+            let d = b2 - a2 * b + 0.25 * a2;
+
+            // Начальные значения u и v
+            let u = 12 * b; // Изменение при движении по x
+            let v = 12 * b + 8 * a; // Изменение при движении по y
+
+            // Первая фаза: движение по x
+            while (b2 * x <= a2 * y) {
+                // Рисуем текущую точку и ее симметричные отражения
+                drawPixel(xc + x, yc + y, color);
+                drawPixel(xc - x, yc + y, color);
+                drawPixel(xc + x, yc - y, color);
+                drawPixel(xc - x, yc - y, color);
+
+                if (d < 0) {
+                    // Обновляем дискриминант для шага только по x
+                    d += b2 * (2 * x + 3);
+                    u += 8 * b; // Корректируем u
+                } else {
+                    // Обновляем дискриминант для шага по x и уменьшения y
+                    d += b2 * (2 * x + 3) + a2 * (-2 * y + 2);
+                    u += 8 * b; // Корректируем u
+                    v += 8 * (b + a); // Корректируем v
+                    y--; // Уменьшаем y
+                }
+                x++; // Увеличиваем x
+            }
+
+            // Переходим ко второй фазе
+            d = b2 * (x + 0.5) * (x + 0.5) + a2 * (y - 1) * (y - 1) - a2 * b2;
+
+            // Вторая фаза: движение по y
+            while (y >= 0) {
+                // Рисуем текущую точку и ее симметричные отражения
+                drawPixel(xc + x, yc + y, color);
+                drawPixel(xc - x, yc + y, color);
+                drawPixel(xc + x, yc - y, color);
+                drawPixel(xc - x, yc - y, color);
+
+                if (d > 0) {
+                    // Обновляем дискриминант для шага только по y
+                    d += a2 * (-2 * y + 3);
+                    v += 8 * a; // Корректируем v
+                } else {
+                    // Обновляем дискриминант для шага по x и уменьшения y
+                    d += b2 * (2 * x + 2) + a2 * (-2 * y + 3);
+                    u += 8 * b; // Корректируем u
+                    v += 8 * (b + a); // Корректируем v
+                    x++; // Увеличиваем x
+                }
+                y--; // Уменьшаем y
+            }
+        }
+
+        // Обработчик событий
+        function drawShapes() {
+            // Получение параметров масштабирования
+            const scaleFactor = parseFloat(document.getElementById('scaleFactor').value);
+            ctx.restore();
+            ctx.save();
+            ctx.scale(scaleFactor, scaleFactor);
+            // Очистка холста
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+
+            // Получение параметров окружности
+            const circleX = parseInt(document.getElementById('circleX').value);
+            const circleY = parseInt(document.getElementById('circleY').value);
+            const circleRadius = parseInt(document.getElementById('circleRadius').value);
+
+            // Получение параметров эллипса
+            const ellipseX = parseInt(document.getElementById('ellipseX').value);
+            const ellipseY = parseInt(document.getElementById('ellipseY').value);
+            const ellipseA = parseInt(document.getElementById('ellipseA').value);
+            const ellipseB = parseInt(document.getElementById('ellipseB').value);
+
+            // Рисование окружности (синий цвет)
+            bresenhamCircle(circleX, circleY, circleRadius, 'blue');
+
+            // Рисование эллипса (красный цвет)
+            drawEllipse(ellipseX, ellipseY, ellipseA, ellipseB, 'red');
+            // Восстановление контекста
+            ctx.restore();
+        }
+
+        // Начальное рисование
+        drawShapes();
+    </script>
+</body>
+
+</html>
