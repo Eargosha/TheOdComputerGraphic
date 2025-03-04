@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="https://atrconstructor.ru/upload/iblock/3b1/3b1dceb52ed7f9aea0162fb6073f548b.jpg" type="image/x-icon">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ЖИВО КРАСИТЬ!</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+    <style>
+        body {
+            display: flex;
+            gap: 20px;
+            margin: 20px;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 1px solid black;
+        }
+        .description {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        button {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Левая часть: Заливка треугольника -->
+    <div>
+        <h2>Заливка треугольника</h2>
+        <canvas id="triangleCanvas" width="300" height="300"></canvas>
+        <button id="fillTriangleButton">Залить треугольник</button>
+        <div class="description">
+            Алгоритм "заливка треугольника":<br>
+            1. Находим верхнюю точку треугольника.<br>
+            2. Для каждой строки между минимальным и максимальным y:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;• Находим точки пересечения линий треугольника с этой строкой.<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;• Рисуем пиксели между этими точками.
+        </div>
+        <label id="triangleLabel">Вот итераций покраски у треугольника: </label>
+    </div>
+
+    <!-- Правая часть: Построчная заливка произвольной фигуры -->
+    <div>
+        <h2>Построчная заливка произвольной фигуры</h2>
+        <canvas id="polygonCanvas" width="300" height="300"></canvas>
+        <button id="fillPolygonButton">Залить фигуру</button>
+        <div class="description">
+            Алгоритм "построчная заливка":<br>
+            1. Для каждой строки на экране:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;• Находим все точки пересечения границы фигуры с этой строкой.<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;• Если количество точек четное, закрашиваем участки между ними.<br>
+            2. Обрабатываем сложные случаи (например, внутренние дыры).
+        </div>
+        <label id="polygonLabel">Вот итераций покраски у произвольной: </label>
+    </div>
+
+    <script>
+        // Функция для заливки треугольника
+        function fillTriangle(ctx, points) {
+            const [A, B, C] = points;
+
+            // Сортируем точки по убыванию y-координат
+            points.sort((p1, p2) => p1[1] - p2[1]);
+            const top = points[0];
+            const mid = points[1];
+            const bot = points[2];
+
+            function interpolate(x1, y1, x2, y2, y) {
+                return x1 + (y - y1) * ((x2 - x1) / (y2 - y1));
+            }
+
+            let c = 0
+
+            for (let y = top[1]; y <= bot[1]; y++) {
+                c++
+                let leftX, rightX;
+
+                if (y < mid[1]) {
+                    leftX = interpolate(top[0], top[1], mid[0], mid[1], y);
+                    rightX = interpolate(top[0], top[1], bot[0], bot[1], y);
+                } else {
+                    leftX = interpolate(mid[0], mid[1], bot[0], bot[1], y);
+                    rightX = interpolate(top[0], top[1], bot[0], bot[1], y);
+                }
+
+                const startX = Math.ceil(leftX);
+                const endX = Math.floor(rightX);
+
+                for (let x = startX; x <= endX; x++) {
+                    c++;
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+
+            document.getElementById("triangleLabel").innerHTML = ("Вот итераций покраски у треугольника: " + c)
+        }
+
+        // Рисуем треугольник
+        const triangleCanvas = document.getElementById('triangleCanvas');
+        const triangleCtx = triangleCanvas.getContext('2d');
+
+        const trianglePoints = [[100, 50], [50, 250], [200, 250]];
+
+        function drawTriangle() {
+            triangleCtx.clearRect(0, 0, triangleCanvas.width, triangleCanvas.height);
+            triangleCtx.strokeStyle = 'black';
+            triangleCtx.beginPath();
+            triangleCtx.moveTo(trianglePoints[0][0], trianglePoints[0][1]);
+            triangleCtx.lineTo(trianglePoints[1][0], trianglePoints[1][1]);
+            triangleCtx.lineTo(trianglePoints[2][0], trianglePoints[2][1]);
+            triangleCtx.closePath();
+            triangleCtx.stroke();
+        }
+
+        drawTriangle();
+
+        // Кнопка "Залить треугольник"
+        document.getElementById('fillTriangleButton').addEventListener('click', () => {
+            fillTriangle(triangleCtx, trianglePoints);
+        });
+
+        // Функция для построчной заливки произвольной фигуры
+        function fillPolygon(ctx, points) {
+            const minY = Math.min(...points.map(p => p[1]));
+            const maxY = Math.max(...points.map(p => p[1]));
+
+            let c = 0;
+
+            for (let y = minY; y <= maxY; y++) {
+                c++;
+                const intersections = [];
+
+                for (let i = 0; i < points.length; i++) {
+                    c++;
+                    const p1 = points[i];
+                    const p2 = points[(i + 1) % points.length];
+
+                    if ((p1[1] <= y && p2[1] > y) || (p2[1] <= y && p1[1] > y)) {
+                        const x = p1[0] + (y - p1[1]) * ((p2[0] - p1[0]) / (p2[1] - p1[1]));
+                        intersections.push(x);
+                    }
+                }
+
+                intersections.sort((a, b) => a - b);
+
+                for (let i = 0; i < intersections.length; i += 2) {
+                    c++;
+                    const startX = Math.ceil(intersections[i]);
+                    const endX = Math.floor(intersections[i + 1]);
+
+                    for (let x = startX; x <= endX; x++) {
+                        ctx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }
+
+            document.getElementById("polygonLabel").innerHTML = ("Вот итераций покраски у произвольной: " + c)
+        }
+
+        // Рисование произвольной фигуры пользователем
+        const polygonCanvas = document.getElementById('polygonCanvas');
+        const polygonCtx = polygonCanvas.getContext('2d');
+
+        let isDrawing = false;
+        let polygonPoints = [];
+
+        polygonCanvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const rect = polygonCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            polygonPoints.push([x, y]);
+            drawPolygon();
+        });
+
+        polygonCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const rect = polygonCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            polygonPoints[polygonPoints.length - 1] = [x, y];
+            drawPolygon();
+        });
+
+        polygonCanvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+
+        function drawPolygon() {
+            polygonCtx.clearRect(0, 0, polygonCanvas.width, polygonCanvas.height);
+            polygonCtx.strokeStyle = 'black';
+            polygonCtx.beginPath();
+            if (polygonPoints.length > 0) {
+                polygonCtx.moveTo(polygonPoints[0][0], polygonPoints[0][1]);
+                for (const point of polygonPoints.slice(1)) {
+                    polygonCtx.lineTo(point[0], point[1]);
+                }
+                polygonCtx.closePath();
+            }
+            polygonCtx.stroke();
+        }
+
+        // Кнопка "Залить фигуру"
+        document.getElementById('fillPolygonButton').addEventListener('click', () => {
+            if (polygonPoints.length < 3) {
+                alert('Нарисуйте замкнутую фигуру!');
+                return;
+            }
+            fillPolygon(polygonCtx, polygonPoints);
+        });
+    </script>
+</body>
+</html>

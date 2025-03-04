@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="icon" href="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Hexahedron.svg/274px-Hexahedron.svg.png" type="image/x-icon">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>КрутиВертиМоиКубики</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+        }
+
+        canvas {
+            border: 1px solid white;
+            background: black;
+        }
+
+        .controls {
+            background-color: #c985857e;
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+
+
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+        crossorigin="anonymous"></script>
+
+    <div class="controls">
+        <label id="angleForAngleByAuto2" for="customRange2"> Градус авто: </label>
+        <input type="range" class="form-range" min="0" max="360" step="1" id="customRange2">
+        <label><input type="checkbox" id="x-axis"> Вертеть по Ox</label>
+        <label><input type="checkbox" id="y-axis"> Вертеть по Oy</label>
+        <label><input type="checkbox" id="z-axis"> Вертеть по Oz</label>
+        <label class="form-label"><input type="checkbox" id="angleByMe"> Вертеть самому</label>
+        <label id="angleForAngleByMe" for="customRange1"> Градус ваш: </label>
+        <input type="range" class="form-range" min="0" max="360" step="1" id="customRange1">
+    </div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+    
+        // Настройка размера холста
+        canvas.width = 1000;
+        canvas.height = 900;
+    
+        // Вершины куба (8 точек)
+        const cubePoints = [
+            { x: -200, y: -200, z: -200 },
+            { x: 200, y: -200, z: -200 },
+            { x: 200, y: 200, z: -200 },
+            { x: -200, y: 200, z: -200 },
+            { x: -200, y: -200, z: 200 },
+            { x: 200, y: -200, z: 200 },
+            { x: 200, y: 200, z: 200 },
+            { x: -200, y: 200, z: 200 }
+        ];
+    
+        // Матрицы поворота
+        function rotateX(points, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            return points.map(p => ({
+                x: p.x,
+                y: p.y * cos - p.z * sin,
+                z: p.y * sin + p.z * cos
+            }));
+        }
+    
+        function rotateY(points, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            return points.map(p => ({
+                x: p.x * cos + p.z * sin,
+                y: p.y,
+                z: -p.x * sin + p.z * cos
+            }));
+        }
+    
+        function rotateZ(points, angle) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            return points.map(p => ({
+                x: p.x * cos - p.y * sin,
+                y: p.x * sin + p.y * cos,
+                z: p.z
+            }));
+        }
+    
+        // Проекция 3D на 2D
+        function project(points) {
+            return points.map(p => ({
+                x: p.x + canvas.width / 2,
+                y: p.y + canvas.height / 2
+            }));
+        }
+    
+        // Рисование ребер куба
+        function drawCube(points) {
+            const edges = [
+                [0, 1], [1, 2], [2, 3], [3, 0],
+                [4, 5], [5, 6], [6, 7], [7, 4],
+                [0, 4], [1, 5], [2, 6], [3, 7]
+            ];
+    
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+    
+            for (const [a, b] of edges) {
+                const p1 = points[a];
+                const p2 = points[b];
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+            }
+    
+            ctx.stroke();
+        }
+    
+        // Главная функция анимации
+        let angle = 0;
+        let autoRotationSpeed = 0; // Скорость автоматического вращения
+    
+        function animate() {
+            // Проверяем, включено ли ручное управление
+            if (document.getElementById('angleByMe').checked) {
+                document.getElementById('customRange1').disabled = false;
+                angle = document.getElementById('customRange1').value * Math.PI / 180; // Преобразуем градусы в радианы
+                document.getElementById('angleForAngleByMe').innerHTML = "Градус ваш: " + document.getElementById('customRange1').value;
+            } else {
+                document.getElementById('customRange1').disabled = true;
+    
+                // Читаем значение из customRange2 и преобразуем его в радианы
+                const rangeValue = document.getElementById('customRange2').value;
+                autoRotationSpeed = (rangeValue * Math.PI / 180) / 100; // Делим на 100, чтобы сделать вращение плавным
+                document.getElementById('angleForAngleByAuto2').innerHTML = "Градус авто: " + rangeValue;
+            }
+    
+            const xRotation = document.getElementById('x-axis').checked;
+            const yRotation = document.getElementById('y-axis').checked;
+            const zRotation = document.getElementById('z-axis').checked;
+    
+            let rotatedPoints = [...cubePoints];
+    
+            if (xRotation) rotatedPoints = rotateX(rotatedPoints, angle);
+            if (yRotation) rotatedPoints = rotateY(rotatedPoints, angle);
+            if (zRotation) rotatedPoints = rotateZ(rotatedPoints, angle);
+    
+            const projectedPoints = project(rotatedPoints);
+            drawCube(projectedPoints);
+    
+            // Если режим ручного управления выключен, увеличиваем угол автоматически
+            if (!document.getElementById('angleByMe').checked) {
+                angle += autoRotationSpeed;
+            }
+    
+            requestAnimationFrame(animate);
+        }
+    
+        animate();
+    </script>
+</body>
+
+</html>
