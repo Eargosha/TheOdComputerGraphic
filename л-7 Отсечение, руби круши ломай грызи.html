@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="icon"
+        href="https://cs.p-static.ru/image/27134437/original-300x300-fit.jpg"
+        type="image/x-icon">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Секи, руби, круши, ломай, грызи меня</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+
+        canvas {
+            border: 2px solid #ced4da;
+            background-color: #ffffff;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Алгоритм отсечения</h1>
+
+        <h4>Сначала квадрат, потом линии</h4>
+        <canvas id="canvas" width="600" height="600"></canvas>
+
+        <div class="controls">
+            <button id="clear" class="btn btn-primary">Очистить</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("canvas"); // Получаем элемент холста по его ID.
+        const ctx = canvas.getContext("2d"); // Получаем 2D контекст для рисования на холсте.
+
+        let rectangle = null; // Переменная для хранения координат прямоугольника (начало и конец).
+        let points = []; // Массив для хранения точек, используемых для рисования линий.
+        let drawingRectangle = true; // Флаг, указывающий, что сейчас режим задания прямоугольника.
+
+        // Обработчик кликов на холсте.
+        canvas.addEventListener("click", (e) => handleClick(e)); // Добавляем обработчик кликов на холст.
+
+        // Очистка холста при нажатии кнопки "Очистить".
+        document.getElementById("clear").addEventListener("click", clearCanvas); // Добавляем обработчик кликов для кнопки очистки.
+
+        function handleClick(e) { // Функция обработки кликов на холсте.
+            const rect = canvas.getBoundingClientRect(); // Получаем размеры и позицию холста относительно окна.
+            const x = Math.floor(e.clientX - rect.left); // Вычисляем X-координату клика относительно холста.
+            const y = Math.floor(e.clientY - rect.top); // Вычисляем Y-координату клика относительно холста.
+
+            if (drawingRectangle) { // Если мы находимся в режиме задания прямоугольника...
+                if (!rectangle) { // Если прямоугольник еще не начат...
+                    rectangle = { startX: x, startY: y }; // Задаем начальную точку прямоугольника.
+                } else { // Если начальная точка уже задана...
+                    rectangle.endX = x; // Задаем конечную X-координату прямоугольника.
+                    rectangle.endY = y; // Задаем конечную Y-координату прямоугольника.
+                    drawRectangle(rectangle); // Рисуем прямоугольник на холсте.
+                    drawingRectangle = false; // Переходим в режим рисования линий.
+                }
+            } else { // Если мы находимся в режиме рисования линий...
+                points.push({ x, y }); // Добавляем текущую точку в массив точек.
+                if (points.length === 2) { // Если набрано две точки для линии...
+                    const clippedLine = clipLine(points[0], points[1], rectangle); // Обрезаем линию по границам прямоугольника.
+                    if (clippedLine) { // Если линия после обрезки существует...
+                        drawLine(clippedLine.start, clippedLine.end, "blue"); // Рисуем обрезанную линию синим цветом.
+                    }
+                    points = []; // Очищаем массив точек для следующей линии.
+                }
+            }
+        }
+
+        function clearCanvas() { // Функция очистки холста.
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Очищаем весь холст.
+            rectangle = null; // Сбрасываем данные о прямоугольнике.
+            points = []; // Очищаем массив точек.
+            drawingRectangle = true; // Возвращаемся в режим задания прямоугольника.
+        }
+
+        function drawRectangle(rect) { // Функция отрисовки прямоугольника.
+            ctx.strokeStyle = "black"; // Устанавливаем цвет границы прямоугольника.
+            ctx.lineWidth = 2; // Устанавливаем толщину линии.
+            ctx.strokeRect( // Рисуем прямоугольник.
+                Math.min(rect.startX, rect.endX), // Минимальная X-координата (левая граница).
+                Math.min(rect.startY, rect.endY), // Минимальная Y-координата (верхняя граница).
+                Math.abs(rect.endX - rect.startX), // Ширина прямоугольника.
+                Math.abs(rect.endY - rect.startY) // Высота прямоугольника.
+            );
+        }
+
+        function drawLine(start, end, color = "red") { // Функция отрисовки линии.
+            ctx.beginPath(); // Начинаем новый путь для рисования.
+            ctx.moveTo(start.x, start.y); // Перемещаемся в начальную точку линии.
+            ctx.lineTo(end.x, end.y); // Рисуем линию до конечной точки.
+            ctx.strokeStyle = color; // Устанавливаем цвет линии.
+            ctx.lineWidth = 2; // Устанавливаем толщину линии.
+            ctx.stroke(); // Отрисовываем линию.
+        }
+
+        function clipLine(p1, p2, rect) { // Функция обрезания линии по границам прямоугольника.
+            const { startX, startY, endX, endY } = rect; // Извлекаем координаты прямоугольника.
+            const left = Math.min(startX, endX); // Левая граница прямоугольника.
+            const right = Math.max(startX, endX); // Правая граница прямоугольника.
+            const top = Math.min(startY, endY); // Верхняя граница прямоугольника.
+            const bottom = Math.max(startY, endY); // Нижняя граница прямоугольника.
+
+            let t1 = 0, t2 = 1; // Параметры для вычисления обрезанной линии.
+            const dx = p2.x - p1.x; // Разница между X-координатами точек линии.
+            const dy = p2.y - p1.y; // Разница между Y-координатами точек линии.
+
+            // Функция проверки пересечения линии с границей.
+            function clipTest(p, q) { // p - направление, q - расстояние до границы.
+                if (p === 0 && q < 0) return false; // Если линия параллельна границе и вне её, возвращаем false.
+                const r = q / p; // Вычисляем параметр r для обрезания.
+                if (p < 0) { // Если линия движется к границе...
+                    t1 = Math.max(t1, r); // Обновляем минимальный параметр t1.
+                    if (t1 > t2) return false; // Если t1 превышает t2, линия полностью вне прямоугольника.
+                } else if (p > 0) { // Если линия движется от границы...
+                    t2 = Math.min(t2, r); // Обновляем максимальный параметр t2.
+                    if (t1 > t2) return false; // Если t1 превышает t2, линия полностью вне прямоугольника.
+                }
+                return true; // Линия пересекает границу.
+            }
+
+            // Проверяем каждую границу прямоугольника.
+            if ( // Если все четыре теста успешны...
+                clipTest(-dx, p1.x - left) && // Проверка левой границы.
+                clipTest(dx, right - p1.x) && // Проверка правой границы.
+                clipTest(-dy, p1.y - top) && // Проверка верхней границы.
+                clipTest(dy, bottom - p1.y) // Проверка нижней границы.
+            ) {
+                const newP1 = { // Вычисляем новую начальную точку обрезанной линии.
+                    x: p1.x + t1 * dx, // X-координата через параметр t1.
+                    y: p1.y + t1 * dy // Y-координата через параметр t1.
+                };
+                const newP2 = { // Вычисляем новую конечную точку обрезанной линии.
+                    x: p1.x + t2 * dx, // X-координата через параметр t2.
+                    y: p1.y + t2 * dy // Y-координата через параметр t2.
+                };
+                return { start: newP1, end: newP2 }; // Возвращаем обрезанную линию.
+            }
+            return null; // Если линия полностью вне прямоугольника, возвращаем null.
+        }
+    </script>
+</body>
+
+</html>
