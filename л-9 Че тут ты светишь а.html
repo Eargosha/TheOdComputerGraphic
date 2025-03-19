@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <link rel="icon" href="https://docs.exponenta.ru/examples/matlab/glnxa64/HistogramOfVectorDataExample_01.png" type="image/x-icon">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Че ты тут светишь, а?!</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: #4CAF50;
+            color: white;
+            padding: 20px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        header p {
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .controls {
+            margin: 20px auto;
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        canvas {
+            max-width: 600px;
+            height: 300px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        #imageContainer {
+            margin: 20px auto;
+        }
+
+        img {
+            max-width: 600px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Че тут за пиксели ваще</h1>
+    </header>
+
+    <div class="controls">
+        <input type="file" id="imageInput" accept="image/*">
+        <button id="clearButton">Очистить</button>
+    </div>
+
+    <div id="imageContainer"></div>
+
+    <div class="container">
+        <canvas id="histogramR" class="histogram"></canvas>
+        <canvas id="histogramG" class="histogram"></canvas>
+        <canvas id="histogramB" class="histogram"></canvas>
+        <canvas id="histogramAvg" class="histogram"></canvas>
+    </div>
+
+    <script>
+        let charts = {}; // Для хранения созданных графиков
+
+        document.getElementById("imageInput").addEventListener("change", function (event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.src = e.target.result;
+                img.onload = function () {
+                    displayImage(img);
+                    processImage(img);
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        document.getElementById("clearButton").addEventListener("click", function () {
+            clearAll();
+        });
+
+        function displayImage(img) {
+            const container = document.getElementById("imageContainer");
+            container.innerHTML = "";
+            const imageElement = document.createElement("img");
+            imageElement.src = img.src;
+            container.appendChild(imageElement);
+        }
+
+        function processImage(img) {
+            // ну мы рисуем изображение на канвасе, чтобы получить доступ к пиксельным данным
+            const canvas = document.createElement("canvas");
+            const ctx = canvas.getContext("2d");
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            // тут пролучаем массив пикселей изображения 
+            // каждый пиксель представлен четырьмя значениями: R, G, B и альфа-канал (прозрачность)
+            const imageData = ctx.getImageData(0, 0, img.width, img.height);
+            // массив pixels содержит данные в формате [R, G, B, A, R, G, B, A, ...].
+            const pixels = imageData.data;
+
+            const R = Array(256).fill(0);
+            const G = Array(256).fill(0);
+            const B = Array(256).fill(0);
+            const avg = Array(256).fill(0);
+
+            for (let i = 0; i < pixels.length; i += 4) {
+                // для каждого пикселя извлекаются значения каналов R, G и B, 
+                // а также вычисляется среднее значение цвета (mean). 
+                // эти значения используются для заполнения массивов R, G, B 
+                // и avg, которые представляют гистограммы для соответствующих каналов
+                const r = pixels[i];
+                const g = pixels[i + 1];
+                const b = pixels[i + 2];
+                const mean = Math.round((r + g + b) / 3);
+
+                R[r]++;
+                G[g]++;
+                B[b]++;
+                avg[mean]++;
+            }
+
+            // строи гистрограммы с помощтью charts
+            updateHistogram("histogramR", "Красный канал", R, "red");
+            updateHistogram("histogramG", "Зеленый канал", G, "green");
+            updateHistogram("histogramB", "Синий канал", B, "blue");
+            updateHistogram("histogramAvg", "Среднее значение цветов", avg, "gray");
+        }
+
+        function updateHistogram(canvasId, label, data, color) {
+            const canvas = document.getElementById(canvasId);
+
+            if (charts[canvasId]) {
+                charts[canvasId].destroy();
+            }
+
+            charts[canvasId] = new Chart(canvas, {
+                type: "bar",
+                data: {
+                    labels: Array.from({ length: 256 }, (_, i) => i),
+                    datasets: [{
+                        label: label,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderWidth: 1,
+                        data: data
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { display: true },
+                        y: {
+                            display: true,
+                            type: 'logarithmic', // Логарифмический масштаб по умолчанию
+                            min: 1
+                        }
+                    }
+                }
+            });
+        }
+
+        function clearAll() {
+            document.getElementById("imageContainer").innerHTML = "";
+            for (const chartId in charts) {
+                if (charts[chartId]) {
+                    charts[chartId].destroy();
+                    charts[chartId] = null;
+                }
+            }
+            charts = {};
+        }
+    </script>
+</body>
+
+</html>
