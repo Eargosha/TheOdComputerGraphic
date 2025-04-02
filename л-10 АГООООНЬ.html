@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ГОРИ</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 15px;
+            border-radius: 8px;
+        }
+        input[type="range"] { width: 150px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div>
+            <label>X: <input type="range" min="-180" max="180" value="0" id="rotX"></label>
+        </div>
+        <div>
+            <label>Y: <input type="range" min="-180" max="180" value="0" id="rotY"></label>
+        </div>
+        <div>
+            <label>Z: <input type="range" min="-180" max="180" value="0" id="rotZ"></label>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Инициализация сцены
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(109, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Группа для комнаты
+        const roomGroup = new THREE.Group();
+        scene.add(roomGroup);
+
+        // Создание центральной окружности
+        const fireRadius = 3;
+        const fireCircle = new THREE.Mesh(
+            new THREE.CircleGeometry(fireRadius, 32),
+            new THREE.MeshBasicMaterial({ color: 0x333333 })
+        );
+        fireCircle.rotation.x = -Math.PI/2;
+        fireCircle.position.y = 0.01; // Слегка приподнимаем над полом
+        roomGroup.add(fireCircle);
+
+        // Создание шахматного пола
+        const floorSize = 20;
+        const tileSize = 1;
+        const floorGeometry = new THREE.PlaneGeometry(floorSize, floorSize, floorSize, floorSize);
+        const floorColors = [];
+        
+        for(let i = 0; i < floorGeometry.attributes.position.count; i++) {
+            const x = Math.floor(i % (floorSize + 1));
+            const y = Math.floor(i / (floorSize + 1));
+            const color = (x + y) % 2 === 0 ? 1 : 0.1;
+            floorColors.push(color, color, color);
+        }
+        
+        floorGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(floorColors), 3));
+        const floorMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI/2;
+        roomGroup.add(floor);
+
+        // Создание стен
+        const wallHeight = 20;
+        const wallMaterial = new THREE.MeshBasicMaterial({ color: 0x444444 });
+        
+        // Левая стена
+        const leftWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(floorSize, wallHeight),
+            wallMaterial
+        );
+        leftWall.position.set(-floorSize/2, wallHeight/2, 0);
+        leftWall.rotation.y = Math.PI/2;
+        roomGroup.add(leftWall);
+
+        // Правая стена
+        const rightWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(floorSize, wallHeight),
+            wallMaterial
+        );
+        rightWall.position.set(floorSize/2, wallHeight/2, 0);
+        rightWall.rotation.y = -Math.PI/2;
+        roomGroup.add(rightWall);
+
+        // Задняя стена
+        const backWall = new THREE.Mesh(
+            new THREE.PlaneGeometry(floorSize, wallHeight),
+            wallMaterial
+        );
+        backWall.position.set(0, wallHeight/2, -floorSize/2);
+        roomGroup.add(backWall);
+
+        // Потолок
+        const ceiling = new THREE.Mesh(
+            new THREE.PlaneGeometry(floorSize, floorSize),
+            wallMaterial
+        );
+        ceiling.position.set(0, wallHeight, 0);
+        ceiling.rotation.x = Math.PI/2;
+        roomGroup.add(ceiling);
+
+        // Система частиц для искр
+        const particles = [];
+        const particleGeometry = new THREE.BufferGeometry();
+        
+        function createParticle() {
+            const angle = Math.random() * Math.PI * 2;
+            const radius = Math.random() * fireRadius;
+            
+            return {
+                x: Math.cos(angle) * radius,
+                y: Math.sin(angle) * radius,
+                z: Math.sin(angle) * radius,
+                color: new THREE.Color(0xff6600),
+                alpha: 1,
+                age: 0,
+                maxAge: 2000,
+                speed: Math.random() * 0.1 + 0.02
+            };
+        }
+
+        function updateParticles() {
+            const positions = [];
+            const colors = [];
+            const alphas = [];
+            
+            particles.forEach(particle => {
+                // Обновление позиции
+                particle.x += (Math.random() - 0.5) * 0.4;
+                particle.y += particle.speed;
+                particle.z += (Math.random() - 0.5) * 0.8;
+                
+                // Обновление цвета и прозрачности
+                particle.alpha = Math.max(0, particle.alpha - 0.010);
+                particle.color.lerp(new THREE.Color(0x000000), 0.83);
+                
+                // Увеличение возраста
+                particle.age++;
+                
+                positions.push(particle.x, particle.y, particle.z);
+                colors.push(particle.color.r, particle.color.g, particle.color.b);
+                alphas.push(particle.alpha);
+            });
+
+            // Удаляем старые частицы
+            for(let i = particles.length - 1; i >= 0; i--) {
+                if(particles[i].alpha <= 0 || particles[i].age > particles[i].maxAge) {
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Добавляем новые частицы
+            if(Math.random() > 0 || Math.random() < 0) {
+                particles.push(createParticle());
+            }
+
+            particleGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            particleGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            particleGeometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
+        }
+
+        // Материал для частиц
+        const particleMaterial = new THREE.ShaderMaterial({
+            vertexShader: `
+                attribute float alpha;
+                varying float vAlpha;
+                void main() {
+                    vAlpha = alpha;
+                    gl_PointSize = 4.0;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 color;
+                varying float vAlpha;
+                void main() {
+                    gl_FragColor = vec4(color, vAlpha);
+                }
+            `,
+            uniforms: { color: { value: new THREE.Color(0xff6600) } },
+            transparent: true,
+            vertexColors: true
+        });
+
+        const particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+        roomGroup.add(particleSystem);
+
+        // Настройка камеры
+        camera.position.set(0, 5, 25);
+        camera.lookAt(0, 5, 0);
+
+        // Обработчики ползунков
+        const rotX = document.getElementById('rotX');
+        const rotY = document.getElementById('rotY');
+        const rotZ = document.getElementById('rotZ');
+
+        // Анимационный цикл
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Обновление вращения комнаты
+            roomGroup.rotation.x = THREE.MathUtils.degToRad(rotX.value);
+            roomGroup.rotation.y = THREE.MathUtils.degToRad(rotY.value);
+            roomGroup.rotation.z = THREE.MathUtils.degToRad(rotZ.value);
+            
+            updateParticles();
+            
+            renderer.render(scene, camera);
+        }
+
+        // Обработка изменения размера окна
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
