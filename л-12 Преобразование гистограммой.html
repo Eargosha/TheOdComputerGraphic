@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Гистограммный редактор</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .image-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        canvas {
+            border: 1px solid #dee2e6;
+            margin: 10px 0;
+            max-width: 100%;
+        }
+
+        .histogram {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .histogram-column {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 280px;
+        }
+
+        .histogram-column h3 {
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #histogramEditor {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+        }
+
+        #loadOriginal {
+            margin-bottom: 15px;
+        }
+
+        #saveModified {
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .hist {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="image-container">
+            <input type="file" id="loadOriginal" accept="image/*" class="form-control">
+            <canvas id="originalImage"></canvas>
+            <button id="saveModified" class="btn btn-primary">Сохранить</button>
+            <canvas id="modifiedImage"></canvas>
+        </div>
+
+        <div class="histogram">
+            <div class="histogram-column">
+                <h3 class="text-primary">Оригинал</h3>
+                <canvas id="originalRedHist" class="hist"></canvas>
+                <canvas id="originalGreenHist" class="hist"></canvas>
+                <canvas id="originalBlueHist" class="hist"></canvas>
+                <canvas id="originalAvgHist" class="hist"></canvas>
+            </div>
+            <div class="histogram-column">
+                <h3 class="text-success">Модифицированное</h3>
+                <canvas id="modifiedRedHist" class="hist"></canvas>
+                <canvas id="modifiedGreenHist" class="hist"></canvas>
+                <canvas id="modifiedBlueHist" class="hist"></canvas>
+                <canvas id="modifiedAvgHist" class="hist"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="histogramEditor" class="hidden">
+        <div class="mb-3">
+            <button id="clearDrawing" class="btn btn-danger mb-2">Очистить</button>
+            <canvas id="editCanvas" width="400" height="200" class="border rounded"></canvas>
+        </div>
+        <button id="saveHistogram" class="btn btn-success w-100">Сохранить</button>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let isDrawing = false;
+        let points = [];
+        const gridLines = 10;
+        const histSize = 256;
+        const histHeight = 100;
+
+        const editCanvas = document.getElementById('editCanvas');
+        const editCtx = editCanvas.getContext('2d');
+
+        // Настройка сетки
+        function drawGrid() {
+            editCtx.strokeStyle = '#eee';
+            editCtx.beginPath();
+
+            for (let i = 0; i <= gridLines; i++) {
+                const x = (i / gridLines) * editCanvas.width;
+                editCtx.moveTo(x, 0);
+                editCtx.lineTo(x, editCanvas.height);
+
+                const y = (i / gridLines) * editCanvas.height;
+                editCtx.moveTo(0, y);
+                editCtx.lineTo(editCanvas.width, y);
+            }
+
+            editCtx.stroke();
+        }
+
+        // Обработчики мыши
+        editCanvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            const rect = editCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            points = [{ x, y }];
+            redraw();
+        });
+
+        editCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const rect = editCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            points.push({ x, y });
+            redraw();
+        });
+
+        editCanvas.addEventListener('mouseup', () => {
+            isDrawing = false;
+        });
+
+        editCanvas.addEventListener('mouseleave', () => {
+            isDrawing = false;
+        });
+
+        // Отрисовка кривой
+        function redraw() {
+            editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
+            drawGrid();
+
+            if (points.length < 1) return;
+
+            editCtx.strokeStyle = 'blue';
+            editCtx.lineWidth = 2;
+            editCtx.beginPath();
+            editCtx.moveTo(points[0].x, points[0].y);
+
+            for (let i = 1; i < points.length - 2; i++) {
+                const xc = (points[i].x + points[i + 1].x) / 2;
+                const yc = (points[i].y + points[i + 1].y) / 2;
+                editCtx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+            }
+
+            editCtx.stroke();
+        }
+
+        // Кнопка очистки
+        document.getElementById('clearDrawing').addEventListener('click', () => {
+            points = [];
+            redraw();
+        });
+
+        // Извлечение гистограммы из кривой
+        function extractHistogramFromDrawing() {
+            const hist = new Array(histSize).fill(0);
+            const imageData = editCtx.getImageData(0, 0, editCanvas.width, editCanvas.height);
+
+            for (let x = 0; x < editCanvas.width; x++) {
+                let maxY = 0;
+
+                // Находим максимальное значение y для данного столбца
+                for (let y = 0; y < editCanvas.height; y++) {
+                    const idx = (y * editCanvas.width + x) * 4;
+
+                    // Проверяем наличие рисования в любом из каналов (R, G, B)
+                    if (imageData.data[idx] > 0 || imageData.data[idx + 1] > 0 || imageData.data[idx + 2] > 0) {
+                        maxY = Math.max(maxY, editCanvas.height - y);
+                    }
+                }
+
+                // Преобразуем координату x в бин гистограммы
+                const bin = Math.floor((x / editCanvas.width) * histSize);
+                hist[bin] = maxY;
+            }
+
+            return hist;
+        }
+
+        // Нормализация гистограммы
+        function normalizeHistogram(hist) {
+            const total = hist.reduce((a, b) => a + b, 0);
+            const targetTotal = modifiedImage.width * modifiedImage.height;
+            return hist.map(v => Math.round((v / total) * targetTotal));
+        }
+
+        // Сохранение нарисованной гистограммы
+        document.getElementById('saveHistogram').addEventListener('click', () => {
+            const newHist = extractHistogramFromDrawing();
+            const normalizedHist = normalizeHistogram(newHist);
+            console.log(normalizedHist)
+            applyHistogramModification(currentChannel.channel, normalizedHist);
+
+            document.getElementById('histogramEditor').classList.add('hidden');
+            updateHistograms();
+        });
+
+        function applyHistogramModification(channel, targetHist) {
+            const modifiedCtx = modifiedImage.getContext('2d');
+            let imageData = modifiedCtx.getImageData(0, 0, modifiedImage.width, modifiedImage.height);
+            const originalHist = calculateHistogram(imageData, channel);
+
+            // Создаем карту преобразования значений
+            const mapping = new Array(256).fill(0);
+            let current = 0;
+
+            for (let i = 0; i < 256; i++) {
+                while (current < 256 && targetHist[current] <= 0) current++;
+                if (current >= 256) current = 255;
+                mapping[i] = current;
+                targetHist[current]--;
+            }
+
+            // Применяем преобразование
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                switch (channel) {
+                    case 0: data[i] = mapping[data[i]]; break;
+                    case 1: data[i + 1] = mapping[data[i + 1]]; break;
+                    case 2: data[i + 2] = mapping[data[i + 2]]; break;
+                }
+            }
+
+            modifiedCtx.putImageData(imageData, 0, 0);
+        }
+
+
+        // Обновление гистограмм
+        function updateHistograms() {
+            if (!originalImage) return;
+
+            const originalCtx = originalImage.getContext('2d');
+            const modifiedCtx = modifiedImage.getContext('2d');
+
+            const originalData = originalCtx.getImageData(0, 0, originalImage.width, originalImage.height);
+            const modifiedData = modifiedCtx.getImageData(0, 0, modifiedImage.width, modifiedImage.height);
+
+            drawHistogram('originalRedHist', calculateHistogram(originalData, 0));
+            drawHistogram('originalGreenHist', calculateHistogram(originalData, 1));
+            drawHistogram('originalBlueHist', calculateHistogram(originalData, 2));
+            drawHistogram('originalAvgHist', calculateAvgHistogram(originalData));
+
+            drawHistogram('modifiedRedHist', calculateHistogram(modifiedData, 0));
+            drawHistogram('modifiedGreenHist', calculateHistogram(modifiedData, 1));
+            drawHistogram('modifiedBlueHist', calculateHistogram(modifiedData, 2));
+            drawHistogram('modifiedAvgHist', calculateAvgHistogram(modifiedData));
+        }
+
+        // Расчет гистограммы для канала
+        function calculateHistogram(imageData, channel) {
+            const hist = new Array(histSize).fill(0);
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                hist[data[i + channel]]++;
+            }
+
+            return hist;
+        }
+
+        // Расчет усредненной гистограммы
+        function calculateAvgHistogram(imageData) {
+            const hist = new Array(histSize).fill(0);
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                hist[Math.floor((data[i] + data[i + 1] + data[i + 2]) / 3)]++;
+            }
+
+            return hist;
+        }
+
+        // Отрисовка гистограммы
+        function drawHistogram(canvasId, hist) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            canvas.width = histSize;
+            canvas.height = histHeight;
+
+            ctx.clearRect(0, 0, histSize, histHeight);
+
+            let max = Math.max(...hist);
+            if (max <= 0) max = 1; // Защита от деления на ноль
+
+            for (let i = 0; i < histSize; i++) {
+                const height = (hist[i] / max) * histHeight;
+                ctx.fillStyle = getChannelColor(canvasId);
+                ctx.fillRect(i, histHeight - height, 1, height);
+            }
+        }
+
+        // Получение цвета канала
+        function getChannelColor(canvasId) {
+            if (canvasId.includes('Red')) return 'red';
+            if (canvasId.includes('Green')) return 'green';
+            if (canvasId.includes('Blue')) return 'blue';
+            return 'gray';
+        }
+
+        document.getElementById('loadOriginal').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = new Image();
+                img.onload = function () {
+                    // Настройка canvas для оригинального изображения
+                    const originalCanvas = document.getElementById('originalImage');
+                    const originalCtx = originalCanvas.getContext('2d');
+                    originalCanvas.width = img.width;
+                    originalCanvas.height = img.height;
+                    originalCtx.drawImage(img, 0, 0);
+
+                    // Копирование оригинального изображения в модифицированное
+                    const modifiedCanvas = document.getElementById('modifiedImage');
+                    const modifiedCtx = modifiedCanvas.getContext('2d');
+                    modifiedCanvas.width = img.width;
+                    modifiedCanvas.height = img.height;
+                    modifiedCtx.drawImage(img, 0, 0);
+
+                    // Обновление гистограмм
+                    updateHistograms();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Открытие редактора гистограммы
+        document.querySelectorAll('.hist').forEach(canvas => {
+            canvas.addEventListener('click', () => {
+                if (!originalImage) return;
+                if (canvas.id.includes('Avg')) return;
+
+                currentChannel = {
+                    canvasId: canvas.id.replace('modified', ''),
+                    channel: canvas.id.includes('Red') ? 0 : canvas.id.includes('Green') ? 1 : 2
+                };
+
+                const hist = calculateHistogram(modifiedImage.getContext('2d').getImageData(0, 0, modifiedImage.width, modifiedImage.height), currentChannel.channel);
+                drawEditableHistogram(hist);
+                document.getElementById('histogramEditor').classList.remove('hidden');
+            });
+        });
+
+        // Отрисовка редактируемой гистограммы
+        function drawEditableHistogram(hist) {
+            points = [];
+            const max = Math.max(...hist) || 1;
+
+            // Увеличили детализацию кривой
+            for (let i = 0; i < histSize; i++) {
+                const x = (i / histSize) * editCanvas.width;
+                const y = editCanvas.height - (hist[i] / max) * editCanvas.height;
+                points.push({ x, y });
+            }
+
+            redraw();
+        }
+
+        // Сохранение изображения
+        document.getElementById('saveModified').addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'modified-image.png';
+            link.href = modifiedImage.toDataURL();
+            link.click();
+        });
+    </script>
+</body>
+
+</html>
