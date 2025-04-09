@@ -224,9 +224,10 @@
                 for (let y = 0; y < editCanvas.height; y++) {
                     const idx = (y * editCanvas.width + x) * 4;
 
-                    // Проверяем наличие рисования в любом из каналов (R, G, B)
-                    if (imageData.data[idx] > 0 || imageData.data[idx + 1] > 0 || imageData.data[idx + 2] > 0) {
-                        maxY = Math.max(maxY, editCanvas.height - y);
+                    // Проверяем наличие рисования (игнорируем сетку)
+                    if (imageData.data[idx] > 50 || imageData.data[idx + 1] > 50 || imageData.data[idx + 2] > 50) {
+                        maxY = Math.max(maxY, y); // Используем просто y вместо editCanvas.height - y
+                        console.log(`x=${x}, y=${y}, R=${imageData.data[idx]}, G=${imageData.data[idx + 1]}, B=${imageData.data[idx + 2]}`);
                     }
                 }
 
@@ -240,9 +241,10 @@
 
         // Нормализация гистограммы
         function normalizeHistogram(hist) {
-            const total = hist.reduce((a, b) => a + b, 0);
-            const targetTotal = modifiedImage.width * modifiedImage.height;
-            return hist.map(v => Math.round((v / total) * targetTotal));
+            const max = Math.max(...hist);
+            if (max === 0) return hist;
+
+            return hist.map(v => Math.round((v / max) * 255));
         }
 
         // Сохранение нарисованной гистограммы
@@ -284,7 +286,6 @@
 
             modifiedCtx.putImageData(imageData, 0, 0);
         }
-
 
         // Обновление гистограмм
         function updateHistograms() {
