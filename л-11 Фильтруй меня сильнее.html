@@ -142,7 +142,7 @@
             .main-container {
                 flex-direction: column;
             }
-            
+
             .canvas-container {
                 flex-direction: column;
             }
@@ -153,7 +153,7 @@
 
 <body>
     <h1>Фильтр для изображений</h1>
-    
+
     <div class="main-container">
         <div class="image-section">
             <div class="canvas-container">
@@ -167,22 +167,22 @@
                     <canvas id="filteredCanvas"></canvas>
                 </div>
             </div>
-            
+
             <input type="file" id="upload" accept="image/*" class="upload-btn">
             <button id="applyFilter" class="apply-btn">Применить фильтр</button>
         </div>
-        
+
         <div class="controls-section">
             <div class="control-group">
                 <label for="k">Коэффициент усиления (k):</label>
                 <input type="number" id="k" value="1" step="0.1" min="0">
             </div>
-            
+
             <div class="control-group">
                 <label for="n">Размер матрицы (n):</label>
                 <input type="number" id="n" value="3" min="1">
             </div>
-            
+
             <div class="control-group">
                 <label for="filterMatrix">Матрица фильтра (через запятую):</label>
                 <textarea id="filterMatrix" rows="3">0,-1,0,-1,5,-1,0,-1,0</textarea>
@@ -193,8 +193,12 @@
                 <div class="preset-label">0.393,0.769,0.189,0.349,0.686,0.168,0.272,0.534,0.131 (сепия)</div>
                 <div class="preset-label">1,2,1,2,4,2,1,2,1 (гаус размытие - 0.1 коэф)</div>
                 <div class="preset-label">1.2,0,0,0,0.9,0,0,0,0.5 (светило солнце)</div>
+                <div class="preset-label">0.25,0.25,0.25,0.25 (размытие 2 на 2)</div>
+                <div class="preset-label">
+                    0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25,0.25 (размытие 4 на 4)
+                </div>
             </div>
-            
+
             <div class="control-group">
                 <label>Обработка краёв изображения:</label>
                 <div class="radio-options">
@@ -208,7 +212,7 @@
                     </label>
                 </div>
             </div>
-            
+
             <div class="control-group">
                 <label>Направление обработки:</label>
                 <div class="radio-options">
@@ -275,9 +279,9 @@
         });
 
         function applyFilter() {
-            const k = parseFloat(kInput.value);
-            const n = parseInt(nInput.value);
-            const matrix = filterMatrixInput.value.split(',').map(Number);
+            const k = parseFloat(kInput.value); // коэффициент усиления
+            const n = parseInt(nInput.value); // размер матрицы (n x n)
+            const matrix = filterMatrixInput.value.split(',').map(Number); // сама матрица фильтра
 
             if (matrix.length !== n * n) {
                 alert("Матрица фильтра должна содержать n*n элементов!");
@@ -285,23 +289,29 @@
             }
 
             const imageData = originalCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
-            const pixels = imageData.data;
+            const pixels = imageData.data;  // исходные пиксели
             const width = originalCanvas.width;
             const height = originalCanvas.height;
-            const newPixels = new Uint8ClampedArray(pixels);
+            const newPixels = new Uint8ClampedArray(pixels);  // копия для результата
 
+            // Определяет направление обработки (сверху-вниз или снизу-вверх):
             const startRow = (startTopLeft.checked) ? 0 : height - 1;
             const startCol = (startTopLeft.checked) ? 0 : width - 1;
 
+            // Основной цикл обработки каждого пикселя:
+            // Внутри:
+            // Обнуляются значения RGB
+            // Вычисляется индекс текущего пикселя
+            // Происходит свертка (convolution) с матрицей фильтра:
             for (let y = startRow; startTopLeft.checked ? y < height - 1 : y > 0; startTopLeft.checked ? y++ : y--) {
                 for (let x = startCol; startTopLeft.checked ? x < width - 1 : x > 0; startTopLeft.checked ? x++ : x--) {
                     let r = 0, g = 0, b = 0;
                     let index = (y * width + x) * 4;
 
-                    for (let dy = -1; dy <= 1; dy++) {
-                        for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = 0; dy < n; dy++) {
+                        for (let dx = 0; dx < n; dx++) {
                             let i = (y + dy) * width + (x + dx);
-                            let weight = matrix[(dy + 1) * n + (dx + 1)];
+                            let weight = matrix[dy * n + dx];
 
                             if (x + dx < 0 || x + dx >= width || y + dy < 0 || y + dy >= height) {
                                 if (edgeMethod1.checked) {
@@ -321,7 +331,7 @@
                     newPixels[index + 2] = Math.min(Math.max(b * k, 0), 255);
                 }
             }
-
+            // Вывод картинки
             filteredCtx.putImageData(new ImageData(newPixels, width, height), 0, 0);
         }
 
