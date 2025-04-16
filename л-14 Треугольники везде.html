@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <link rel="icon" href="https://images.stopgame.ru/uploads/images/547355/form/2019/12/27/1577473540.jpg" type="image/x-icon">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Триангуляция многоугольника</title>
+  <style>
+    canvas {
+      border: 1px solid black;
+      display: block;
+      margin: 0 auto; /* Центрирование canvas */
+    }
+
+    .container {
+      max-width: 600px; /* Ограничение ширины контейнера */
+      margin: 0 auto; /* Центрирование контейнера */
+      text-align: center; /* Выравнивание текста по центру */
+    }
+  </style>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="d-flex flex-column min-vh-100 justify-content-center align-items-center bg-light">
+  <div class="container bg-white p-4 rounded shadow">
+    <h1 class="mb-4">Полигонизируемся</h1>
+    <div class="controls mb-3">
+      <button class="btn btn-primary me-2" onclick="triangulate()">Разбить на треугольники</button>
+      <button class="btn btn-secondary" onclick="clearCanvas()">Очистить</button>
+    </div>
+    <canvas id="canvas" width="400" height="400"></canvas>
+  </div>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let points = [];
+    let isDrawing = false;
+
+    // Обработчик кликов для добавления точек
+    canvas.addEventListener('click', (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      points.push({ x, y });
+
+      // Рисуем точку
+      drawPoint(x, y);
+
+      // Если есть хотя бы две точки, соединяем их линией
+      if (points.length > 1) {
+        drawLine(points[points.length - 2], points[points.length - 1]);
+      }
+    });
+
+    // Функция для рисования точки
+    function drawPoint(x, y) {
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'red';
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    // Функция для рисования линии между двумя точками
+    function drawLine(p1, p2) {
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.strokeStyle = 'black';
+      ctx.stroke();
+      ctx.closePath();
+    }
+
+    // Очистка холста и массива точек
+    function clearCanvas() {
+      points = [];
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // Функция триангуляции
+    function triangulate() {
+      if (points.length < 3) {
+        alert('Минимум нужно 3 точки для создания многоугольника.');
+        return;
+      }
+
+      // Проверяем направление обхода
+      const area = calculatePolygonArea(points);
+      const isClockwise = area < 0;
+
+      // Замыкаем многоугольник
+      drawLine(points[points.length - 1], points[0]);
+
+      // Алгоритм триангуляции
+      const triangles = [];
+      const remainingPoints = [...points];
+      let iterations = 0;
+      const maxIterations = remainingPoints.length * 2;
+
+      while (remainingPoints.length > 3 && iterations++ < maxIterations) {
+        let earFound = false;
+
+        for (let i = 0; i < remainingPoints.length; i++) {
+          const a = remainingPoints[(i - 1 + remainingPoints.length) % remainingPoints.length];
+          const b = remainingPoints[i];
+          const c = remainingPoints[(i + 1) % remainingPoints.length];
+
+          if (isEar(a, b, c, points, isClockwise)) {
+            triangles.push([a, b, c]);
+            remainingPoints.splice(i, 1);
+            earFound = true;
+            break;
+          }
+        }
+
+        if (!earFound) {
+          alert('Ошибка триангуляции! Многоугольник не может быть самопересекающимся.');
+          return;
+        }
+      }
+
+      // Добавляем последний треугольник
+      triangles.push([remainingPoints[0], remainingPoints[1], remainingPoints[2]]);
+
+      // Рисуем треугольники
+      triangles.forEach(triangle => {
+        ctx.beginPath();
+        ctx.moveTo(triangle[0].x, triangle[0].y);
+        ctx.lineTo(triangle[1].x, triangle[1].y);
+        ctx.lineTo(triangle[2].x, triangle[2].y);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 0.5)`;
+        ctx.fill();
+        ctx.stroke();
+      });
+    }
+
+    // Вычисление площади многоугольника
+    function calculatePolygonArea(points) {
+      let area = 0;
+      for (let i = 0; i < points.length; i++) {
+        const p1 = points[i];
+        const p2 = points[(i + 1) % points.length];
+        area += (p1.x * p2.y - p2.x * p1.y);
+      }
+      return area / 2;
+    }
+
+    // Проверка, является ли вершина "ухом"
+    function isEar(a, b, c, allPoints, isClockwise) {
+      if (!isConvex(a, b, c, isClockwise)) return false;
+
+      const triangle = [a, b, c];
+      for (const point of allPoints) {
+        if (triangle.includes(point)) continue;
+        if (isPointInTriangle(point, a, b, c)) return false;
+      }
+      return true;
+    }
+
+    // Проверка, является ли угол выпуклым
+    function isConvex(a, b, c, isClockwise) {
+      const crossProduct = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      return isClockwise ? crossProduct < 0 : crossProduct > 0;
+    }
+
+    // Проверка, находится ли точка внутри треугольника
+    function isPointInTriangle(p, a, b, c) {
+      const d1 = sign(p, a, b);
+      const d2 = sign(p, b, c);
+      const d3 = sign(p, c, a);
+
+      const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
+      const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
+
+      return !(hasNeg && hasPos);
+    }
+
+    // Вычисление знака площади треугольника
+    function sign(p1, p2, p3) {
+      return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+    }
+  </script>
+</body>
+
+</html>
