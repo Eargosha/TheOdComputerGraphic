@@ -168,25 +168,53 @@
         let currentChannel = null;
         let sliders = [];
 
-        // Обновление гистограмм
+        let userModifiedHistograms = {
+            red: null,
+            green: null,
+            blue: null,
+            avg: null
+        };
+
         function updateHistograms() {
             if (!originalImage) return;
-
             const originalCtx = originalImage.getContext('2d');
-            const modifiedCtx = modifiedImage.getContext('2d');
-
             const originalData = originalCtx.getImageData(0, 0, originalImage.width, originalImage.height);
-            const modifiedData = modifiedCtx.getImageData(0, 0, modifiedImage.width, modifiedImage.height);
 
+            // Оригинальные гистограммы
             drawHistogram('originalRedHist', calculateHistogram(originalData, 0));
             drawHistogram('originalGreenHist', calculateHistogram(originalData, 1));
             drawHistogram('originalBlueHist', calculateHistogram(originalData, 2));
             drawHistogram('originalAvgHist', calculateAvgHistogram(originalData));
 
-            drawHistogram('modifiedRedHist', calculateHistogram(modifiedData, 0));
-            drawHistogram('modifiedGreenHist', calculateHistogram(modifiedData, 1));
-            drawHistogram('modifiedBlueHist', calculateHistogram(modifiedData, 2));
-            drawHistogram('modifiedAvgHist', calculateAvgHistogram(modifiedData));
+            // Модифицированные гистограммы
+            if (userModifiedHistograms.red) {
+                drawHistogram('modifiedRedHist', userModifiedHistograms.red);
+            } else {
+                const modifiedData = modifiedImage.getContext('2d').getImageData(0, 0, modifiedImage.width, modifiedImage.height);
+                drawHistogram('modifiedRedHist', calculateHistogram(modifiedData, 0));
+            }
+
+            if (userModifiedHistograms.green) {
+                drawHistogram('modifiedGreenHist', userModifiedHistograms.green);
+            } else {
+                const modifiedData = modifiedImage.getContext('2d').getImageData(0, 0, modifiedImage.width, modifiedImage.height);
+                drawHistogram('modifiedGreenHist', calculateHistogram(modifiedData, 1));
+            }
+
+            if (userModifiedHistograms.blue) {
+                drawHistogram('modifiedBlueHist', userModifiedHistograms.blue);
+            } else {
+                const modifiedData = modifiedImage.getContext('2d').getImageData(0, 0, modifiedImage.width, modifiedImage.height);
+                drawHistogram('modifiedBlueHist', calculateHistogram(modifiedData, 2));
+            }
+
+            // Для усредненной гистограммы
+            if (userModifiedHistograms.avg) {
+                drawHistogram('modifiedAvgHist', userModifiedHistograms.avg);
+            } else {
+                const modifiedData = modifiedImage.getContext('2d').getImageData(0, 0, modifiedImage.width, modifiedImage.height);
+                drawHistogram('modifiedAvgHist', calculateAvgHistogram(modifiedData));
+            }
         }
 
         // Расчет гистограммы для канала
@@ -219,12 +247,23 @@
             const ctx = canvas.getContext('2d');
             canvas.width = histSize;
             canvas.height = histHeight;
-
             ctx.clearRect(0, 0, histSize, histHeight);
 
-            let max = Math.max(...hist);
-            if (max <= 0) max = 1; // Защита от деления на ноль
+            // Для пользовательских гистограмм
+            if (Array.isArray(hist) && hist.length === 256) {
+                let max = Math.max(...hist);
+                if (max <= 0) max = 1;
+                for (let i = 0; i < histSize; i++) {
+                    const height = (hist[i] / max) * histHeight;
+                    ctx.fillStyle = getChannelColor(canvasId);
+                    ctx.fillRect(i, histHeight - height, 1, height);
+                }
+                return;
+            }
 
+            // Оригинальная логика
+            let max = Math.max(...hist);
+            if (max <= 0) max = 1;
             for (let i = 0; i < histSize; i++) {
                 const height = (hist[i] / max) * histHeight;
                 ctx.fillStyle = getChannelColor(canvasId);
@@ -283,10 +322,10 @@
                 };
 
                 const hist = calculateHistogram(
-                    modifiedImage.getContext('2d').getImageData(0, 0, modifiedImage.width, modifiedImage.height), 
+                    modifiedImage.getContext('2d').getImageData(0, 0, modifiedImage.width, modifiedImage.height),
                     currentChannel.channel
                 );
-                
+
                 openHistogramEditor(hist);
                 document.getElementById('histogramEditor').classList.remove('hidden');
             });
@@ -297,17 +336,17 @@
             const sliderContainer = document.getElementById('sliderContainer');
             sliderContainer.innerHTML = '';
             sliders = [];
-            
+
             // Создаем слайдеры для каждого десятого значения гистограммы (для производительности)
             const step = 15
             for (let i = 0; i < histSize; i += step) {
                 const sliderRow = document.createElement('div');
                 sliderRow.className = 'slider-row';
-                
+
                 const label = document.createElement('span');
                 label.className = 'slider-label';
                 label.textContent = i;
-                
+
                 const slider = document.createElement('input');
                 slider.type = 'range';
                 slider.className = 'slider';
@@ -315,16 +354,16 @@
                 slider.max = '255';
                 slider.value = i;
                 slider.dataset.index = i;
-                
+
                 slider.addEventListener('input', updatePreviewHistogram);
-                
+
                 sliderRow.appendChild(label);
                 sliderRow.appendChild(slider);
                 sliderContainer.appendChild(sliderRow);
-                
+
                 sliders.push(slider);
             }
-            
+
             updatePreviewHistogram();
         }
 
@@ -334,48 +373,48 @@
             const ctx = previewCanvas.getContext('2d');
             const width = previewCanvas.width;
             const height = previewCanvas.height;
-            
+
             ctx.clearRect(0, 0, width, height);
-            
+
             // Рисуем сетку
             ctx.strokeStyle = '#eee';
             ctx.beginPath();
-            
+
             // Вертикальные линии
             for (let i = 0; i <= 20; i++) {
                 const x = (i / 10) * width;
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, height);
             }
-            
+
             // Горизонтальные линии
             for (let i = 0; i <= 10; i++) {
                 const y = (i / 5) * height;
                 ctx.moveTo(0, y);
                 ctx.lineTo(width, y);
             }
-            
+
             ctx.stroke();
-            
+
             // Рисуем гистограмму на основе слайдеров
             ctx.strokeStyle = getChannelColor(currentChannel.canvasId);
             ctx.lineWidth = 2;
             ctx.beginPath();
-            
+
             const points = [];
             for (let i = 0; i < sliders.length; i++) {
                 const x = (parseInt(sliders[i].dataset.index) / histSize) * width;
                 const y = height - (parseInt(sliders[i].value) / 255) * height;
                 points.push({ x, y });
             }
-            
+
             if (points.length > 0) {
                 ctx.moveTo(points[0].x, points[0].y);
-                
+
                 for (let i = 1; i < points.length; i++) {
                     ctx.lineTo(points[i].x, points[i].y);
                 }
-                
+
                 ctx.stroke();
             }
         }
@@ -388,29 +427,33 @@
             updatePreviewHistogram();
         });
 
-        // Сохранение гистограммы
+        // Обновленная функция для сохранения гистограммы
         document.getElementById('saveHistogram').addEventListener('click', () => {
             // Создаем маппинг значений на основе слайдеров
             const mapping = new Array(256).fill(0);
-            
             // Интерполяция между значениями слайдеров
             for (let i = 0; i < sliders.length - 1; i++) {
                 const startIdx = parseInt(sliders[i].dataset.index);
-                const endIdx = parseInt(sliders[i+1].dataset.index);
+                const endIdx = parseInt(sliders[i + 1].dataset.index);
                 const startVal = parseInt(sliders[i].value);
-                const endVal = parseInt(sliders[i+1].value);
-                
+                const endVal = parseInt(sliders[i + 1].value);
                 for (let j = startIdx; j <= endIdx; j++) {
-                    const t = (j - startIdx) / (endIdx - startIdx);
+                    const t = (j - startIdx) / (endIdx - startIdx || 1); // Защита от деления на ноль
                     mapping[j] = Math.round(startVal + t * (endVal - startVal));
                 }
             }
-            
+
+            // Сохраняем пользовательскую гистограмму
+            const channelName = currentChannel.channel === 0 ? 'red'
+                : currentChannel.channel === 1 ? 'green'
+                    : 'blue';
+            userModifiedHistograms[channelName] = mapping.map(v => Math.max(0, Math.min(255, v))); // Кэшируем
+
             // Применяем маппинг к изображению
             applyHistogramModification(currentChannel.channel, mapping);
-            
+
             document.getElementById('histogramEditor').classList.add('hidden');
-            updateHistograms();
+            updateHistograms(); // Обновляем гистограммы
         });
 
         // Применение модификации гистограммы
