@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Текстурирование</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .canvas-container {
+            position: relative;
+            margin: 20px auto;
+        }
+
+        .instructions {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container mt-4">
+        <h1 class="text-center mb-4">Текстурирование</h1>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Управление</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="textureInput" class="form-label">Выберите картинку:</label>
+                            <input class="form-control" type="file" id="textureInput" accept="image/*">
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="textureMode" id="bilinearMode" checked>
+                            <label class="form-check-label" for="bilinearMode">Билинейная интерполяция</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="textureMode" id="affineMode">
+                            <label class="form-check-label" for="affineMode">Аффинное текстурирование</label>
+                        </div>
+                        <button id="clearBtn" class="btn btn-danger mt-3" disabled>Очистить холст</button>
+                        <button id="saveBtn" class="btn btn-success mt-3" disabled>Сохранить изображение</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Холст</h5>
+                    </div>
+                    <div class="card-body canvas-container">
+                        <canvas id="canvas" width="750" height="700"
+                            style="border:1px solid #ddd; width: 100%;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let texture = null;
+        let points = [];
+        let textureLoaded = false;
+        const clearBtn = document.getElementById('clearBtn');
+        const saveBtn = document.getElementById('saveBtn');
+
+
+        // Функция сохранения canvas в изображение
+        saveBtn.addEventListener('click', function () {
+            const link = document.createElement('a');
+            link.download = 'canvas_image.png'; // Имя файла
+            link.href = canvas.toDataURL('image/png'); // Получаем данные изображения
+            link.click(); // Скачиваем файл
+        });
+
+        // Массив для хранения всех нарисованных треугольников
+        let drawnTriangles = [];
+
+        function resizeCanvas() {
+            const container = document.querySelector('.canvas-container');
+            const aspectRatio = canvas.width / canvas.height;
+            const newWidth = container.clientWidth;
+            const newHeight = newWidth / aspectRatio;
+            canvas.style.width = newWidth + 'px';
+            canvas.style.height = newHeight + 'px';
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Обработчик клавиш для Ctrl + Z
+        document.addEventListener('keydown', function (e) {
+            if (e.ctrlKey && e.key === 'z') {
+                e.preventDefault();
+                if (points.length > 0) {
+                    // Удаляем последнюю точку из массива
+                    points.pop();
+                    redrawCanvas();
+                } else if (drawnTriangles.length > 0) {
+                    // Удаляем последний нарисованный треугольник
+                    drawnTriangles.pop();
+                    redrawCanvas();
+                }
+            }
+        });
+
+        // Функция для перерисовки всего canvas
+        function redrawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Перерисовываем все сохраненные треугольники
+            drawnTriangles.forEach(trianglePoints => {
+                const [v0, v1, v2] = trianglePoints;
+                drawTexturedTriangleForPoints(v0, v1, v2);
+            });
+            // Перерисовываем текущие точки
+            points.forEach(point => {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(point.x - 2, point.y - 2, 4, 4);
+            });
+        }
+
+        // Рисование текстурированного треугольника для заданных точек
+        function drawTexturedTriangleForPoints(v0, v1, v2) {
+            const uv0 = { u: 0, v: 0 };
+            const uv1 = { u: 1, v: 0 };
+            const uv2 = { u: 0, v: 1 };
+
+            const minX = Math.min(v0.x, v1.x, v2.x);
+            const maxX = Math.max(v0.x, v1.x, v2.x);
+            const minY = Math.min(v0.y, v1.y, v2.y);
+            const maxY = Math.max(v0.y, v1.y, v2.y);
+
+            const tempCtx = document.createElement('canvas').getContext('2d');
+            tempCtx.canvas.width = canvas.width;
+            tempCtx.canvas.height = canvas.height;
+            tempCtx.fillStyle = 'rgba(0,0,0,0)';
+            tempCtx.fillRect(0, 0, tempCtx.canvas.width, tempCtx.canvas.height);
+
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    const denominator = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y);
+                    if (denominator === 0) continue;
+
+                    const alpha = ((v1.y - v2.y) * (x - v2.x) + (v2.x - v1.x) * (y - v2.y)) / denominator;
+                    const beta = ((v2.y - v0.y) * (x - v2.x) + (v0.x - v2.x) * (y - v2.y)) / denominator;
+                    const gamma = 1 - alpha - beta;
+
+                    if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+                        const u = alpha * uv0.u + beta * uv1.u + gamma * uv2.u;
+                        const v = alpha * uv0.v + beta * uv1.v + gamma * uv2.v;
+
+                        const texX = u * texture.width;
+                        const texY = v * texture.height;
+                        const color = bilinearInterpolate(texture.data, texture.width, texture.height, texX, texY);
+
+                        tempCtx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 255)`;
+                        tempCtx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }
+
+            ctx.drawImage(tempCtx.canvas, 0, 0);
+        }
+
+        // Основная функция рисования текстурированного треугольника
+        function drawTexturedTriangle() {
+            const [v0, v1, v2] = points;
+            drawTexturedTriangleForPoints(v0, v1, v2);
+        }
+
+        document.getElementById('textureInput').addEventListener('change', function (e) {
+            let file = e.target.files[0];
+            if (!file) return;
+            let reader = new FileReader();
+            reader.onload = function (event) {
+                let img = new Image();
+                img.onload = function () {
+                    let tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                    let tempCtx = tempCanvas.getContext('2d');
+                    tempCtx.drawImage(img, 0, 0);
+                    texture = tempCtx.getImageData(0, 0, img.width, img.height);
+                    textureLoaded = true;
+                    clearBtn.disabled = false;
+                    saveBtn.disabled = false;
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        canvas.addEventListener('click', function (e) {
+            if (!textureLoaded) {
+                alert('Загрузите текстуру сначала.');
+                return;
+            }
+            let rect = canvas.getBoundingClientRect();
+            let scaleX = canvas.width / rect.width;
+            let scaleY = canvas.height / rect.height;
+            let x = (e.clientX - rect.left) * scaleX;
+            let y = (e.clientY - rect.top) * scaleY;
+            points.push({ x, y });
+            ctx.fillStyle = 'red';
+            ctx.fillRect(x - 2, y - 2, 4, 4);
+            if (points.length === 3) {
+                // Сохраняем треугольник в массив drawnTriangles
+                drawnTriangles.push([...points]);
+                drawTexturedTriangle(); // Рисуем текстурированный треугольник
+                points = []; // Очищаем массив точек
+            }
+        });
+
+        clearBtn.addEventListener('click', function () {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            points = [];
+            drawnTriangles = [];
+        });
+
+        function bilinearInterpolate(texData, texW, texH, x, y) {
+            // Билинейная фильтрация. Берём RGB известных пикселей и по ним ищем RGB 
+            // для неизвестных пикселей. Складываем их значения и делим на количество 
+            // берём соседние). Для края можем просто скопировать один ряд
+
+            // билинейную интерполяцию для получения цвета пикселя текстуры
+            // Алгоритм:
+            // Находятся четыре соседних пикселя текстуры вокруг (x, y).
+            // Вычисляются веса для каждого пикселя на основе расстояния до (x, y).
+            // Цветовые компоненты (R, G, B) вычисляются как взвешенная сумма цветов соседних пикселей.
+            // Возвращается новый цвет с округлением значений до целых чисел.
+            x = Math.max(0, Math.min(texW - 1, x));
+            y = Math.max(0, Math.min(texH - 1, y));
+
+            const x1 = Math.floor(x);
+            const y1 = Math.floor(y);
+            const x2 = x1 + 1 >= texW ? x1 : x1 + 1;
+            const y2 = y1 + 1 >= texH ? y1 : y1 + 1;
+
+            const dx = x - x1;
+            const dy = y - y1;
+
+            function getPixel(x, y) {
+                const idx = (Math.floor(y) * texW + Math.floor(x)) * 4;
+                return {
+                    r: texData[idx],
+                    g: texData[idx + 1],
+                    b: texData[idx + 2],
+                    a: texData[idx + 3]
+                };
+            }
+
+            const c00 = getPixel(x1, y1);
+            const c10 = getPixel(x2, y1);
+            const c01 = getPixel(x1, y2);
+            const c11 = getPixel(x2, y2);
+
+            const r = (1 - dx) * (1 - dy) * c00.r + dx * (1 - dy) * c10.r + (1 - dx) * dy * c01.r + dx * dy * c11.r;
+            const g = (1 - dx) * (1 - dy) * c00.g + dx * (1 - dy) * c10.g + (1 - dx) * dy * c01.g + dx * dy * c11.g;
+            const b = (1 - dx) * (1 - dy) * c00.b + dx * (1 - dy) * c10.b + (1 - dx) * dy * c01.b + dx * dy * c11.b;
+            return { r: Math.floor(r), g: Math.floor(g), b: Math.floor(b) };
+        }
+
+        function calculateAffineCoefficients(v0, v1, v2, uv0, uv1, uv2) {
+            const A = [
+                [v0.x, v0.y, 1, 0, 0, 0],
+                [0, 0, 0, v0.x, v0.y, 1],
+                [v1.x, v1.y, 1, 0, 0, 0],
+                [0, 0, 0, v1.x, v1.y, 1],
+                [v2.x, v2.y, 1, 0, 0, 0],
+                [0, 0, 0, v2.x, v2.y, 1]
+            ];
+
+            const B = [uv0.u, uv0.v, uv1.u, uv1.v, uv2.u, uv2.v];
+
+            // Решение системы уравнений (матричный метод)
+            const X = numeric.solve(A, B);
+            return {
+                a: X[0], b: X[1], c: X[2],
+                d: X[3], e: X[4], f: X[5]
+            };
+        }
+
+        function drawTexturedTriangle() {
+            const [v0, v1, v2] = points;
+            const uv0 = { u: 0, v: 0 };
+            const uv1 = { u: 1, v: 0 };
+            const uv2 = { u: 0, v: 1 };
+
+            const minX = Math.min(v0.x, v1.x, v2.x);
+            const maxX = Math.max(v0.x, v1.x, v2.x);
+            const minY = Math.min(v0.y, v1.y, v2.y);
+            const maxY = Math.max(v0.y, v1.y, v2.y);
+
+            const tempCtx = document.createElement('canvas').getContext('2d');
+            tempCtx.canvas.width = canvas.width;
+            tempCtx.canvas.height = canvas.height;
+            tempCtx.fillStyle = 'rgba(0,0,0,0)';
+            tempCtx.fillRect(0, 0, tempCtx.canvas.width, tempCtx.canvas.height);
+
+            const mode = document.querySelector('input[name="textureMode"]:checked').id;
+
+            let affineCoeffs;
+            if (mode === 'affineMode') {
+                affineCoeffs = calculateAffineCoefficients(v0, v1, v2, uv0, uv1, uv2);
+            }
+
+            // Алгоритм растеризации
+
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    // Для каждого пикселя в ограничивающем прямоугольнике проверяется принадлежность 
+                    // к треугольнику с помощью барицентрических координат (alpha, beta, gamma).
+                    // Если пиксель внутри треугольника, вычисляются UV-координаты текстуры.
+                    // UV-координаты переводятся в координаты текстуры (texX, texY).
+                    // С помощью билинейной интерполяции определяется цвет пикселя текстуры.
+                    // Пиксель рисуется на временном canvas.
+                    const denominator = (v1.y - v2.y) * (v0.x - v2.x) + (v2.x - v1.x) * (v0.y - v2.y);
+                    if (denominator === 0) continue;
+
+                    const alpha = ((v1.y - v2.y) * (x - v2.x) + (v2.x - v1.x) * (y - v2.y)) / denominator;
+                    const beta = ((v2.y - v0.y) * (x - v2.x) + (v0.x - v2.x) * (y - v2.y)) / denominator;
+                    const gamma = 1 - alpha - beta;
+
+                    if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+                        let u, v;
+
+                        switch (mode) {
+                            case 'bilinearMode':
+                                u = alpha * uv0.u + beta * uv1.u + gamma * uv2.u;
+                                v = alpha * uv0.v + beta * uv1.v + gamma * uv2.v;
+                                break;
+
+                            case 'affineMode':
+                                u = affineCoeffs.a * x + affineCoeffs.b * y + affineCoeffs.c;
+                                v = affineCoeffs.d * x + affineCoeffs.e * y + affineCoeffs.f;
+                                break;
+                        }
+
+                        const texX = u * texture.width;
+                        const texY = v * texture.height;
+                        const color = bilinearInterpolate(texture.data, texture.width, texture.height, texX, texY);
+
+                        tempCtx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, 255)`;
+                        tempCtx.fillRect(x, y, 1, 1);
+                    }
+                }
+            }
+
+            ctx.drawImage(tempCtx.canvas, 0, 0);
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/numeric/1.2.6/numeric.min.js"></script>
+</body>
+
+</html>
